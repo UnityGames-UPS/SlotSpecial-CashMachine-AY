@@ -2,17 +2,20 @@ using System;
 using System.Collections.Generic;
 
 [Serializable]
-public class BetData
-{
-    public double currentBet;
-    public double matrixX;
-}
-
-[Serializable]
 public class MessageData
 {
-    public BetData data;
-    public string id;
+  public string type;
+  public Data payload = new();
+
+}
+[Serializable]
+public class Data
+{
+  public int betIndex;
+  public string Event;
+  public int levelIndex;
+  public List<int> index;
+  public int option;
 }
 
 [Serializable]

@@ -692,7 +692,7 @@ public class SlotController : MonoBehaviour
 
     internal void CallCloseSocket()
     {
-        socketManager.CloseSocket();
+      StartCoroutine(socketManager.CloseSocket());
     }
 
     internal void DisconnectionPopup()
