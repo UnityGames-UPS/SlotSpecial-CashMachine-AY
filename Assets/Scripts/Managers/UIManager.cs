@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -187,6 +188,8 @@ public class UIManager : MonoBehaviour
   #endregion
 
   [SerializeField] private SocketIOManager socketManager;
+  [SerializeField] private List<int> availableBets = new List<int>();   // features
+  [SerializeField] private List<int> availableDenoms = new List<int>(); // bets
 
   private int SpinCount = 0;
   private int currentBet = 10;
@@ -334,15 +337,15 @@ public class UIManager : MonoBehaviour
   {
     for (int i = 0; i < paylines.symbols.Count; i++)
     {
-      if (paylines.symbols[i].Name.ToUpper() == "REDRESPIN")
+      if (paylines.symbols[i].name.ToUpper() == "REDRESPIN")
       {
         if (RedSpin_Text) RedSpin_Text.text = paylines.symbols[i].description.ToString();
       }
-      if (paylines.symbols[i].Name.ToUpper() == "ZERORESPIN")
+      if (paylines.symbols[i].name.ToUpper() == "ZERORESPIN")
       {
         if (ZeroSpin_Text) ZeroSpin_Text.text = paylines.symbols[i].description.ToString();
       }
-      if (paylines.symbols[i].Name.ToUpper() == "REELACTIVATION")
+      if (paylines.symbols[i].name.ToUpper() == "REELACTIVATION")
       {
         if (ReelActivation_Text) ReelActivation_Text.text = paylines.symbols[i].description.ToString();
       }
@@ -484,82 +487,100 @@ public class UIManager : MonoBehaviour
     }
   }
 
+  internal void SetupBets(List<int> features)
+  {
+    availableBets = features;
+    if (Bet_Slider)
+    {
+      Bet_Slider.minValue = 0;
+      Bet_Slider.maxValue = features.Count - 1;
+      Bet_Slider.wholeNumbers = true;
+      Bet_Slider.value = 0; // default first bet level
+    }
+    OnBetChange(0);
+  }
+
   private void OnBetChange(float value)
   {
-    int myvalue = 0;
-    foreach (Transform t in slotManager.Slot_Transform)
+    int index = Mathf.RoundToInt(value);
+    if (index < 0 || index >= availableBets.Count) return;
+
+    int myvalue = availableBets[index];
+
+    // Reset: enable all
+    foreach (Transform t in slotManager.Slot_Transform) t.gameObject.SetActive(true);
+    foreach (Transform t in slotManager.RedSlot_Transform) t.gameObject.SetActive(true);
+
+    // Apply your old disable/color logic
+    if (index == 0)
     {
-      t.gameObject.SetActive(true);
+      slotManager.Slot_Transform[2].gameObject.SetActive(false);
+      slotManager.Slot_Transform[1].gameObject.SetActive(false);
+      slotManager.RedSlot_Transform[2].gameObject.SetActive(false);
+      slotManager.RedSlot_Transform[1].gameObject.SetActive(false);
+
+      if (Slots_image[1]) Slots_image[1].color = Disabled_Color;
+      if (Slots_image[2]) Slots_image[2].color = Disabled_Color;
     }
-    foreach (Transform t in slotManager.RedSlot_Transform)
+    else if (index == 1)
     {
-      t.gameObject.SetActive(true);
+      slotManager.Slot_Transform[2].gameObject.SetActive(false);
+      slotManager.RedSlot_Transform[2].gameObject.SetActive(false);
+
+      if (Slots_image[1]) Slots_image[1].color = Color.white;
+      if (Slots_image[2]) Slots_image[2].color = Disabled_Color;
     }
-    switch (value)
+    else
     {
-      case 0:
-        myvalue = 1;
-        if (slotManager) slotManager.SlotNumber = 1;
-        if (slotManager) slotManager.BetCounter = 0;
-        slotManager.Slot_Transform[2].gameObject.SetActive(false);
-        slotManager.Slot_Transform[1].gameObject.SetActive(false);
-        slotManager.RedSlot_Transform[2].gameObject.SetActive(false);
-        slotManager.RedSlot_Transform[1].gameObject.SetActive(false);
-        if (Slots_image[1]) Slots_image[1].color = Disabled_Color;
-        if (Slots_image[2]) Slots_image[2].color = Disabled_Color;
-        break;
-      case 1:
-        myvalue = 5;
-        if (slotManager) slotManager.SlotNumber = 2;
-        if (slotManager) slotManager.BetCounter = 1;
-        slotManager.Slot_Transform[2].gameObject.SetActive(false);
-        slotManager.RedSlot_Transform[2].gameObject.SetActive(false);
-        if (Slots_image[1]) Slots_image[1].color = Color.white;
-        if (Slots_image[2]) Slots_image[2].color = Disabled_Color;
-        break;
-      case 2:
-        myvalue = 10;
-        if (slotManager) slotManager.SlotNumber = 3;
-        if (slotManager) slotManager.BetCounter = 2;
-        if (Slots_image[1]) Slots_image[1].color = Color.white;
-        if (Slots_image[2]) Slots_image[2].color = Color.white;
-        break;
+      if (Slots_image[1]) Slots_image[1].color = Color.white;
+      if (Slots_image[2]) Slots_image[2].color = Color.white;
     }
+
+    slotManager.SlotNumber = index;
+    Debug.Log(myvalue);
     currentBet = myvalue;
+
     if (Bet_Text) Bet_Text.text = myvalue.ToString();
     if (BetMain_Text) BetMain_Text.text = myvalue.ToString("f2");
   }
 
+  internal void SetupDenoms(List<int> denoms)
+  {
+    availableDenoms = denoms;
+    if (Denom_Slider)
+    {
+      Denom_Slider.minValue = 0;
+      Denom_Slider.maxValue = denoms.Count - 1;
+      Denom_Slider.wholeNumbers = true;
+      Denom_Slider.value = 0; // default first denom
+    }
+    OnDenomChange(0);
+  }
+
   private void OnDenomChange(float value)
   {
-    int myvalue = 0;
-    switch (value)
-    {
-      case 0:
-        myvalue = 1;
-        break;
-      case 1:
-        myvalue = 10;
-        break;
-    }
+    int index = Mathf.RoundToInt(value);
+    if (index < 0 || index >= availableDenoms.Count) return;
+
+    int myvalue = availableDenoms[index];
     if (Denom_Text) Denom_Text.text = myvalue.ToString();
+
+    slotManager.DenomCounter = index; // keep track for server call
+    slotManager.BetCounter = index;
+    Debug.Log(myvalue);
   }
 
   private void OnBetButton(bool isIncrement)
   {
     if (isIncrement)
     {
-      if (Bet_Slider.value < 2)
-      {
+      if (Bet_Slider.value < Bet_Slider.maxValue)
         Bet_Slider.value++;
-      }
     }
     else
     {
-      if (Bet_Slider.value > 0)
-      {
+      if (Bet_Slider.value > Bet_Slider.minValue)
         Bet_Slider.value--;
-      }
     }
   }
 
@@ -567,17 +588,13 @@ public class UIManager : MonoBehaviour
   {
     if (isIncrement)
     {
-      if (Denom_Slider.value < 1)
-      {
+      if (Denom_Slider.value < Denom_Slider.maxValue)
         Denom_Slider.value++;
-      }
     }
     else
     {
-      if (Denom_Slider.value > 0)
-      {
+      if (Denom_Slider.value > Denom_Slider.minValue)
         Denom_Slider.value--;
-      }
     }
   }
   #endregion
@@ -754,8 +771,9 @@ public class UIManager : MonoBehaviour
 
   internal void resetWinColor()
   {
-    for (int i = 0; i < slotManager.SlotNumber; i++)
+    for (int i = 0; i < 3; i++)
     {
+      Debug.Log(i);
       Slots_image[i].color = Color.white;
     }
   }

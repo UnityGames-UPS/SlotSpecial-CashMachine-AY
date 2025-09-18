@@ -9,9 +9,10 @@ mergeInto(LibraryManager.library, {
 
     SendPostMessage: function(messagePtr) {
       var message = UTF8ToString(messagePtr);
-      console.log('SendReactPostMessage, message sent: ' + message);
+      // console.log('SendReactPostMessage, message sent: ' + message);
       if(window.ReactNativeWebView){
         if(message == "authToken"){
+          window.ReactNativeWebView.postMessage("if message is authtoken");
           var injectedObjectJson = window.ReactNativeWebView.injectedObjectJson();
           var injectedObj = JSON.parse(injectedObjectJson);
 
@@ -38,7 +39,6 @@ mergeInto(LibraryManager.library, {
                   socketURL: event.data.socketURL,
                   nameSpace: event.data && event.data.nameSpace ? event.data.nameSpace : ''
               }); 
-
               if (typeof SendMessage === 'function') {
                 SendMessage('SocketManager', 'ReceiveAuthToken', combinedData);
               }
@@ -48,7 +48,9 @@ mergeInto(LibraryManager.library, {
             }
           });
         }
-        window.parent.postMessage(message, "*");
+        if(window.parent.dispatchReactUnityEvent != null){
+          window.parent.dispatchReactUnityEvent(message);
+        }
       }
     }
 });
