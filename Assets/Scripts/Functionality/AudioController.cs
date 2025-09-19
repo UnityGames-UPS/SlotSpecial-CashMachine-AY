@@ -19,23 +19,6 @@ public class AudioController : MonoBehaviour
         audioSpin_button.clip = clips[clips.Length-2];
     }
 
-    private void OnApplicationFocus(bool focus)
-    {
-        CheckFocusFunction(focus);
-    }
-
-    internal void CheckFocusFunction(bool focus)
-    {
-        if (!focus)
-        {
-            audio_listener.enabled = false;
-        }
-        else
-        {
-            audio_listener.enabled = true;
-        }
-    }
-
     internal void PlayWLAudio(string type)
     {
         audioPlayer_wl.loop = false;
