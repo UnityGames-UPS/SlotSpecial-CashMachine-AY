@@ -90,11 +90,11 @@ public class SlotController : MonoBehaviour
     [SerializeField] internal bool IsTurboOn;
     private bool WasAutoSpinOn;
     private float SpinDelay = 0.2f;
-
-
+    private List<FrozenIndex> frozenIndices;
 
     private Coroutine AutoSpinRoutine = null;
     private Coroutine tweenroutine = null;
+    private string[,] frozenMatrix;
 
     private void Start()
     {
@@ -136,17 +136,6 @@ public class SlotController : MonoBehaviour
         }
     }
 
-    // private IEnumerator AutoSpinCoroutine(int count)
-    // {
-    //     while (IsAutoSpin && count > 0)
-    //     {
-    //         StartSpin();
-    //         count--;
-    //         if (uiController) uiController.updateAutoCount(count);
-    //         yield return tweenroutine;
-    //     }
-    //     StopAutoSpin();
-    // }
     private IEnumerator AutoSpinCoroutine(int count)
     {
         while (IsAutoSpin && count > 0)
@@ -164,11 +153,11 @@ public class SlotController : MonoBehaviour
         yield return new WaitUntil(() => !IsSpinning);
         if (AutoSpinRoutine != null || tweenroutine != null)
         {
-            StopCoroutine(AutoSpinRoutine);
-            StopCoroutine(tweenroutine);
+            if (AutoSpinRoutine != null) StopCoroutine(AutoSpinRoutine);
+            if (tweenroutine != null) StopCoroutine(tweenroutine);
             tweenroutine = null;
             AutoSpinRoutine = null;
-            StopCoroutine(StopAutoSpinCoroutine());
+            // removed StopCoroutine(StopAutoSpinCoroutine()) which attempted to stop itself incorrectly
             if (uiController) uiController.ToggleButtonGrp(true);
             if (uiController) uiController.StopAutoSpin();
         }
@@ -185,6 +174,7 @@ public class SlotController : MonoBehaviour
 
     private IEnumerator TweenRoutine()
     {
+        uiController.ResetWinText();
         if (!uiController.CheckBalance(socketManager.Bets[BetCounter]))
         {
             if (uiController) uiController.EnableLowBalance();
@@ -209,61 +199,59 @@ public class SlotController : MonoBehaviour
             if (i == 1)
             {
                 InitializeTweening(Slot_Transform[i], 1, false, true);
-                // InitializeTweening(Slot_Transform[i], 1, false, true, i);
                 yield return new WaitForSeconds(0.1f);
             }
             else
             {
                 InitializeTweening(Slot_Transform[i], 1, false);
-                // InitializeTweening(Slot_Transform[i], 1, false, false, i);
                 yield return new WaitForSeconds(0.1f);
             }
         }
 
-        // socketManager.AccumulateResult(BetCounter,SlotNumber);
         socketManager.AccumulateResult(DenomCounter, SlotNumber);
 
         yield return new WaitUntil(() => socketManager.isResultdone);
 
+        if (socketManager.resultData.payload.frozenIndices != null && socketManager.resultData.matrix != null && socketManager.resultData.matrix.Count > 0)
+        {
+            int rows = socketManager.resultData.matrix.Count;
+            // use max columns among rows so frozenMatrix covers any ragged rows
+            int cols = 0;
+            for (int r = 0; r < rows; r++)
+                cols = Mathf.Max(cols, socketManager.resultData.matrix[r].Count);
+
+            frozenMatrix = new string[rows, cols];
+
+            foreach (var f in socketManager.resultData.payload.frozenIndices)
+            {
+                int row = f.position[0];
+                int col = f.position[1];
+                if (row >= 0 && row < rows && col >= 0 && col < cols)
+                    frozenMatrix[row, col] = f.symbol;
+            }
+        }
+        else
+        {
+            frozenMatrix = null;
+        }
+
         PopulateNormalSpin(0, false);
-
-
-        // for (int i = 0; i < SlotNumber + 1; i++)
-        // {
-        //     if (i == 1)
-        //     {
-        //         yield return StopTweening(5, Slot_Transform[i], i, 1, int.Parse(socketManager.resultData.matrix[0][i]), false, true);
-        //     }
-        //     else
-        //     {
-        //         yield return StopTweening(5, Slot_Transform[i], i, 1, int.Parse(socketManager.resultData.matrix[0][i]), false);
-        //     }
-        // }
         for (int i = 0; i < SlotNumber + 1; i++)
         {
-            string symbolStr = socketManager.resultData.matrix[0][i];
-
-            if (IsFrozen(i))
-            {
-                symbolStr = GetFrozenSymbol(i); // ✅ overwrite with frozen symbol
-            }
-
-            int symbolVal = int.Parse(symbolStr);
-
             if (i == 1)
             {
-                yield return StopTweening(5, Slot_Transform[i], i, 1, symbolVal, false, true);
+                yield return StopTweening(5, Slot_Transform[i], i, 1, int.Parse(socketManager.resultData.matrix[0][i]), false, true);
             }
             else
             {
-                yield return StopTweening(5, Slot_Transform[i], i, 1, symbolVal, false);
+                yield return StopTweening(5, Slot_Transform[i], i, 1, int.Parse(socketManager.resultData.matrix[0][i]), false);
             }
         }
-
         StopSpinToggle = false;
         StartNormalAnimation(0);
-        //yield return new WaitForSeconds(0.3f);
-        yield return alltweens[^1].WaitForCompletion();
+        // wait for last tween to finish safely
+        if (alltweens.Count > 0)
+            yield return alltweens[alltweens.Count - 1].WaitForCompletion();
         KillAllTweens();
         if (socketManager.resultData.payload.isZeroRespin)
         {
@@ -300,61 +288,27 @@ public class SlotController : MonoBehaviour
     #endregion
 
     #region GreenSpinLogic
-
     private IEnumerator GreenRespinLogic(int length)
     {
         if (uiController) uiController.GreenRespin(true);
         if (audioController) audioController.PlayWLAudio("respin");
         if (IsTurboOn) yield return new WaitForSecondsRealtime(0.5f);
         else yield return new WaitForSecondsRealtime(2.5f);
-        for (int len = 0; len < length - 1; len++)
+
+        for (int len = 0; len < length; len++)
         {
-            for (int i = 0; i < SlotNumber + 1; i++)
-            {
-                if (int.Parse(socketManager.resultData.matrix[len][i]) == 0)
-                {
-                    if (i != 1)
-                    {
-                        yield return InitiateGreenRespin(i, false);
-                    }
-                    else
-                    {
-                        yield return InitiateGreenRespin(i, true);
-                    }
-                }
-            }
-            if (audioController) audioController.PlayWLAudio("spin");
-            if (IsTurboOn) yield return new WaitForSeconds(0.5f);
-            else yield return new WaitForSeconds(2f);
-            PopulateNormalSpin(len + 1, false);
-            int k = 0;
-            for (int i = 0; i < SlotNumber + 1; i++)
-            {
-                if (int.Parse(socketManager.resultData.matrix[len][i]) == 0)
-                {
-                    if (i != 1)
-                    {
-                        yield return StopGreenRespin(i, k, int.Parse(socketManager.resultData.matrix[len][i]), false);
-                        k++;
-                    }
-                    else
-                    {
-                        yield return StopGreenRespin(i, k, int.Parse(socketManager.resultData.matrix[len][i]), true);
-                        k++;
-                    }
-                }
-            }
-            StartNormalAnimation(len + 1);
-            KillAllTweens();
+            // Start regular spin for this respin iteration
+            yield return StartRespinIteration(len);
+
             yield return new WaitForSeconds(1f);
         }
         if (uiController) uiController.GreenRespin(false);
     }
 
+
     private IEnumerator InitiateGreenRespin(int value, bool isMid)
     {
         InitializeTweening(Slot_Transform[value], 1, true, isMid);
-        // InitializeTweening(Slot_Transform[value], 1, true, isMid, value);
         yield return new WaitForSeconds(0.1f);
     }
 
@@ -365,7 +319,6 @@ public class SlotController : MonoBehaviour
     #endregion
 
     #region RedSpinLogic
-
     private IEnumerator RedSpinLogic()
     {
         PopulateRedSpin(0, true);
@@ -373,51 +326,15 @@ public class SlotController : MonoBehaviour
         if (uiController) uiController.GreenRespin(true);
         yield return new WaitForSeconds(1);
         if (uiController) uiController.RedRespin(true);
-        // yield return new WaitForSeconds(3);
         if (IsTurboOn) yield return new WaitForSeconds(2f);
         else yield return new WaitForSeconds(3f);
-        for (int i = 0; i < SlotNumber + 1; i++)
-        {
-            if (int.Parse(socketManager.resultData.matrix[0][i]) == 0)
-            {
-                if (i != 1)
-                {
-                    yield return InitiateRedRespin(i, false);
-                }
-                else
-                {
-                    yield return InitiateRedRespin(i, true);
-                }
-            }
-        }
-        if (audioController) audioController.PlayWLAudio("spin");
-        // yield return new WaitForSeconds(2f);
+
+        // Start red respin iteration
+        yield return StartRespinIteration(0);
+
         if (IsTurboOn) yield return new WaitForSeconds(1f);
         else yield return new WaitForSeconds(2f);
-        int k = 0;
-        PopulateRedSpin(1, false);
-        PopulateNormalSpin(1, true);
-        StartNormalAnimation(1);
-        for (int i = 0; i < SlotNumber + 1; i++)
-        {
-            if (int.Parse(socketManager.resultData.matrix[0][i]) == 0)
-            {
-                if (i != 1)
-                {
-                    yield return StopRedRespin(i, k, int.Parse(socketManager.resultData.matrix[1][i]), false);
-                    k++;
-                }
-                else
-                {
-                    yield return StopRedRespin(i, k, int.Parse(socketManager.resultData.matrix[1][i]), true);
-                    k++;
-                }
-            }
-        }
-        //yield return new WaitForSeconds(2);
-        if (IsTurboOn) yield return new WaitForSeconds(1f);
-        else yield return new WaitForSeconds(2f);
-        KillAllRedTweens();
+
         if (uiController) uiController.GreenRespin(false);
         if (uiController) uiController.RedRespin(false);
     }
@@ -425,70 +342,237 @@ public class SlotController : MonoBehaviour
     private IEnumerator InitiateRedRespin(int value, bool isMid)
     {
         InitializeTweening(RedSlot_Transform[value], 2, false, isMid);
-        // InitializeTweening(RedSlot_Transform[value], 2, false, isMid, value);
         yield return new WaitForSeconds(0.1f);
     }
 
     private IEnumerator StopRedRespin(int value, int tweenvalue, int isMoney, bool isMid)
     {
-        yield return StopTweening(5, RedSlot_Transform[value], tweenvalue, 1, isMoney, false, isMid);
+        // Wait for the red tween to complete naturally instead of killing it abruptly
+        yield return StopTweening(5, RedSlot_Transform[value], tweenvalue, 2, isMoney, false, isMid);
+
+        // Start animations after the tween completes
+        if (socketManager.resultData.matrix.Count > 1) // Ensure row 1 exists
+        {
+            int columnsInRow1 = socketManager.resultData.matrix[1].Count;
+            for (int i = 0; i < SlotNumber + 1 && i < columnsInRow1; i++)
+            {
+                if (int.Parse(socketManager.resultData.matrix[1][i]) != 0)
+                {
+                    if (i < RedStop_Anims.Length && RedStop_Anims[i] != null)
+                    {
+                        RedStop_Anims[i].StartAnimation();
+                    }
+                }
+            }
+        }
+    }
+    #endregion
+
+    #region Respin Helper Methods
+
+    private IEnumerator StartRespinIteration(int respinLevel)
+    {
+        // Store current frozen state
+        var currentFrozenMatrix = frozenMatrix;
+
+        if (audioController) audioController.PlayWLAudio("spin");
+
+        // Start spinning (reuse existing spin logic)
+        IsSpinning = true;
+        ResetSpin();
+
+        // Start tweening for all slots (frozen ones will be updated later)
         for (int i = 0; i < SlotNumber + 1; i++)
         {
-            if (int.Parse(socketManager.resultData.matrix[1][i]) != 0)
+            if (i == 1)
             {
-                RedStop_Anims[i].StartAnimation();
+                InitializeTweening(Slot_Transform[i], 1, false, true);
+                yield return new WaitForSeconds(0.1f);
+            }
+            else
+            {
+                InitializeTweening(Slot_Transform[i], 1, false);
+                yield return new WaitForSeconds(0.1f);
+            }
+        }
+
+        // Send respin request to backend
+        socketManager.AccumulateResult(DenomCounter, SlotNumber);
+        yield return new WaitUntil(() => socketManager.isResultdone);
+
+        // Update frozen matrix with new backend response
+        UpdateFrozenMatrix();
+
+        // Populate results from backend
+        PopulateNormalSpin(respinLevel, false);
+
+        // Stop tweening and show results - only update unfrozen slots
+        for (int i = 0; i < SlotNumber + 1; i++)
+        {
+            int symbolId = 0;
+            if (socketManager.resultData.matrix != null &&
+                respinLevel < socketManager.resultData.matrix.Count &&
+                i < socketManager.resultData.matrix[respinLevel].Count)
+            {
+                symbolId = int.Parse(socketManager.resultData.matrix[respinLevel][i]);
+            }
+
+            if (i == 1)
+            {
+                yield return StopTweening(5, Slot_Transform[i], i, 1, symbolId, false, true);
+            }
+            else
+            {
+                yield return StopTweening(5, Slot_Transform[i], i, 1, symbolId, false);
+            }
+        }
+
+        StartNormalAnimation(respinLevel);
+
+        // Wait for last tween to finish safely
+        if (alltweens.Count > 0)
+            yield return alltweens[alltweens.Count - 1].WaitForCompletion();
+
+        KillAllTweens();
+
+        // Show winnings if any for this respin
+        if (socketManager.resultData.payload?.currentWinning > 0)
+        {
+            yield return uiController.UpdateWinnings(socketManager.playerdata.balance, socketManager.resultData.payload.currentWinning);
+        }
+
+        IsSpinning = false;
+    }
+
+    private void UpdateFrozenMatrix()
+    {
+        // Update frozen matrix based on backend respin response
+        if (socketManager.resultData?.payload?.frozenIndices != null &&
+            socketManager.resultData.matrix != null &&
+            socketManager.resultData.matrix.Count > 0)
+        {
+            int rows = socketManager.resultData.matrix.Count;
+            int cols = 0;
+            for (int r = 0; r < rows; r++)
+                cols = Mathf.Max(cols, socketManager.resultData.matrix[r].Count);
+
+            frozenMatrix = new string[rows, cols];
+
+            foreach (var f in socketManager.resultData.payload.frozenIndices)
+            {
+                int row = f.position[0];
+                int col = f.position[1];
+                if (row >= 0 && row < rows && col >= 0 && col < cols)
+                    frozenMatrix[row, col] = f.symbol;
             }
         }
     }
     #endregion
 
     #region PopulateLogic
-
-    private void PopulateRedSpin(int index, bool isFirst)
+    private void PopulateRedSpin(int rowIndex, bool isFirst)
     {
-        for (int i = 0; i < SlotNumber + 1; i++)
+        var matrix = socketManager.resultData?.matrix;
+        if (matrix == null || rowIndex < 0 || rowIndex >= matrix.Count) return;
+
+        var row = matrix[rowIndex];
+        int cols = row?.Count ?? 0;
+        int uiCols = Mathf.Min(cols, RedStop_Images.Length);
+
+        for (int col = 0; col < uiCols; col++)
         {
-            if (int.Parse(socketManager.resultData.matrix[index][i]) != 0)
+            string frozenSymbol = (frozenMatrix != null && rowIndex < frozenMatrix.GetLength(0) && col < frozenMatrix.GetLength(1))
+                ? frozenMatrix[rowIndex, col]
+                : null;
+
+            if (!string.IsNullOrEmpty(frozenSymbol))
             {
-                PopulateRedAnimationSprites(RedStop_Anims[i], RedStop_Images[i], int.Parse(socketManager.resultData.matrix[index][i]));
+                if (int.TryParse(frozenSymbol, out int symbolId) && symbolId != 0)
+                    PopulateRedAnimationSprites(RedStop_Anims[col], RedStop_Images[col], symbolId);
+                else if (!isFirst)
+                {
+                    int m_index = UnityEngine.Random.Range(7, 10);
+                    RedStop_Images[col].sprite = RedSlot_Sprites[m_index];
+                    if (col < Stop_Images.Length) Stop_Images[col].sprite = Slot_Sprites[m_index];
+                }
             }
-            else if (!isFirst)
+            else
             {
-                int m_index = UnityEngine.Random.Range(7, 10);
-                RedStop_Images[i].sprite = RedSlot_Sprites[m_index];
-                Stop_Images[i].sprite = Slot_Sprites[m_index];
+                if (int.TryParse(row[col], out int symbolId) && symbolId != 0)
+                {
+                    PopulateRedAnimationSprites(RedStop_Anims[col], RedStop_Images[col], symbolId);
+                }
+                else if (!isFirst)
+                {
+                    int m_index = UnityEngine.Random.Range(7, 10);
+                    RedStop_Images[col].sprite = RedSlot_Sprites[m_index];
+                    if (col < Stop_Images.Length) Stop_Images[col].sprite = Slot_Sprites[m_index];
+                }
             }
         }
     }
 
-    private void PopulateNormalSpin(int index, bool isFirst)
+    private void PopulateNormalSpin(int rowIndex, bool isFirst)
     {
-        for (int i = 0; i < SlotNumber + 1; i++)
+        var matrix = socketManager.resultData?.matrix;
+        if (matrix == null || rowIndex < 0 || rowIndex >= matrix.Count) return;
+
+        var row = matrix[rowIndex];
+        int cols = row?.Count ?? 0;
+        int uiCols = Mathf.Min(cols, Stop_Images.Length);
+
+        for (int col = 0; col < uiCols; col++)
         {
-            if (int.Parse(socketManager.resultData.matrix[index][i]) != 0)
+            string frozenSymbol = (frozenMatrix != null && rowIndex < frozenMatrix.GetLength(0) && col < frozenMatrix.GetLength(1))
+                ? frozenMatrix[rowIndex, col]
+                : null;
+
+            if (!string.IsNullOrEmpty(frozenSymbol))
             {
-                PopulateAnimationSprites(Stop_Anims[i], Stop_Images[i], int.Parse(socketManager.resultData.matrix[index][i]));
+                if (int.TryParse(frozenSymbol, out int symbolId) && symbolId != 0)
+                    PopulateAnimationSprites(Stop_Anims[col], Stop_Images[col], symbolId);
+                else if (!isFirst)
+                {
+                    int m_index = UnityEngine.Random.Range(7, 10);
+                    Stop_Images[col].sprite = Slot_Sprites[m_index];
+                    if (col < RedStop_Images.Length) RedStop_Images[col].sprite = RedSlot_Sprites[m_index];
+                }
             }
-            else if (!isFirst)
+            else
             {
-                int m_index = UnityEngine.Random.Range(7, 10);
-                Stop_Images[i].sprite = Slot_Sprites[m_index];
-                RedStop_Images[i].sprite = RedSlot_Sprites[m_index];
+                if (int.TryParse(row[col], out int symbolId) && symbolId != 0)
+                {
+                    PopulateAnimationSprites(Stop_Anims[col], Stop_Images[col], symbolId);
+                }
+                else if (!isFirst)
+                {
+                    int m_index = UnityEngine.Random.Range(7, 10);
+                    Stop_Images[col].sprite = Slot_Sprites[m_index];
+                    if (col < RedStop_Images.Length) RedStop_Images[col].sprite = RedSlot_Sprites[m_index];
+                }
             }
         }
     }
 
-    private void StartNormalAnimation(int index)
+    private void StartNormalAnimation(int rowIndex)
     {
-        for (int i = 0; i < SlotNumber + 1; i++)
+        var matrix = socketManager.resultData?.matrix;
+        if (matrix == null || rowIndex < 0 || rowIndex >= matrix.Count) return;
+
+        var row = matrix[rowIndex];
+        int cols = row?.Count ?? 0;
+        int uiCols = Mathf.Min(cols, Stop_Anims.Length);
+
+        for (int col = 0; col < uiCols; col++)
         {
-            if (int.Parse(socketManager.resultData.matrix[index][i]) != 0)
+            if (int.TryParse(row[col], out int symbolId) && symbolId != 0)
             {
-                Stop_Anims[i].StartAnimation();
-                uiController.AddWinColor(i);
+                if (Stop_Anims[col] != null) Stop_Anims[col].StartAnimation();
+                uiController?.AddWinColor(col);
             }
         }
     }
+
     #endregion
 
     #region TweenLogic
@@ -544,6 +628,7 @@ public class SlotController : MonoBehaviour
     {
         animScript.textureArray.Clear();
         animScript.textureArray.TrimExcess();
+        animScript.AnimationSpeed = 8;
         switch (val)
         {
             case 1:
@@ -565,6 +650,7 @@ public class SlotController : MonoBehaviour
                 }
                 break;
             case 4:
+                animScript.AnimationSpeed = 6;
                 for (int i = 0; i < RedSymbol6.Length; i++)
                 {
                     animScript.textureArray.Add(RedSymbol6[i]);
@@ -586,6 +672,7 @@ public class SlotController : MonoBehaviour
         StopImage.sprite = RedSlot_Sprites[val];
     }
 
+
     private void InitializeTweening(Transform slotTransform, int type, bool isGreen, bool IsMid = false)
     {
         int myTweenHeight = 0;
@@ -600,12 +687,12 @@ public class SlotController : MonoBehaviour
         Tweener tweener = null;
         if (!isGreen)
         {
-            slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, 0);
+            slotTransform.localPosition = new Vector3(slotTransform.localPosition.x, 0f, slotTransform.localPosition.z);
             tweener = slotTransform.DOLocalMoveY(-myTweenHeight, 1f).SetLoops(-1, LoopType.Restart).SetEase(Ease.Linear).SetDelay(0);
         }
         else
         {
-            slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, -myTweenHeight);
+            slotTransform.localPosition = new Vector3(slotTransform.localPosition.x, -myTweenHeight, slotTransform.localPosition.z);
             tweener = slotTransform.DOLocalMoveY(0, 1f).SetLoops(-1, LoopType.Restart).SetEase(Ease.Linear).SetDelay(0);
         }
         tweener.Play();
@@ -619,100 +706,9 @@ public class SlotController : MonoBehaviour
             redalltweens.Add(tweener);
         }
     }
-    // private void InitializeTweening(Transform slotTransform, int type, bool isGreen, bool IsMid = false)
-    // {
-    //     int myTweenHeight = IsMid ? MidtweenHeight : tweenHeight;
-
-    //     // start pos
-    //     if (!isGreen)
-    //         slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, 0);
-    //     else
-    //         slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, -myTweenHeight);
-
-    //     Tweener tweener = (!isGreen)
-    //         ? slotTransform.DOLocalMoveY(-myTweenHeight, 1f).SetLoops(-1, LoopType.Restart).SetEase(Ease.Linear).SetDelay(0)
-    //         : slotTransform.DOLocalMoveY(0, 1f).SetLoops(-1, LoopType.Restart).SetEase(Ease.Linear).SetDelay(0);
-
-    //     tweener.Play();
-
-    //     // Find column index (so we store tween at correct slot index)
-    //     int columnIndex = -1;
-    //     if (type == 1)
-    //     {
-    //         for (int i = 0; i < Slot_Transform.Length; i++)
-    //         {
-    //             if (Slot_Transform[i] == slotTransform) { columnIndex = i; break; }
-    //         }
-    //     }
-    //     else
-    //     {
-    //         for (int i = 0; i < RedSlot_Transform.Length; i++)
-    //         {
-    //             if (RedSlot_Transform[i] == slotTransform) { columnIndex = i; break; }
-    //         }
-    //     }
-
-    //     if (type == 1)
-    //     {
-    //         if (columnIndex >= 0)
-    //         {
-    //             while (alltweens.Count <= columnIndex) alltweens.Add(null);
-    //             if (alltweens[columnIndex] != null) { alltweens[columnIndex].Kill(); alltweens[columnIndex] = null; }
-    //             alltweens[columnIndex] = tweener;
-    //         }
-    //         else
-    //         {
-    //             // fallback: append
-    //             alltweens.Add(tweener);
-    //         }
-    //     }
-    //     else
-    //     {
-    //         if (columnIndex >= 0)
-    //         {
-    //             while (redalltweens.Count <= columnIndex) redalltweens.Add(null);
-    //             if (redalltweens[columnIndex] != null) { redalltweens[columnIndex].Kill(); redalltweens[columnIndex] = null; }
-    //             redalltweens[columnIndex] = tweener;
-    //         }
-    //         else
-    //         {
-    //             redalltweens.Add(tweener);
-    //         }
-    //     }
-    // }
 
     private IEnumerator StopTweening(int reqpos, Transform slotTransform, int index, int type, int isMoney, bool isGreen, bool isMid = false)
     {
-        if (IsFrozen(index))
-        {
-            // Kill tween if running
-            if (type == 1 && index < alltweens.Count && alltweens[index] != null)
-                alltweens[index].Kill();
-            if (type != 1 && index < redalltweens.Count && redalltweens[index] != null)
-                redalltweens[index].Kill();
-
-            string frozenSymbol = GetFrozenSymbol(index);
-            int frozenVal = int.Parse(frozenSymbol);
-
-            // Force sprite/animation
-            PopulateAnimationSprites(Stop_Anims[index], Stop_Images[index], frozenVal);
-
-            // Snap transform so it won’t move
-            slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, 0);
-
-            if (frozenVal > 0)
-            {
-                uiController.AddWinColor(index);
-                if (audioController) audioController.PlayWLAudio("win");
-            }
-            else
-            {
-                if (audioController) audioController.PlayWLAudio("dot");
-            }
-
-            yield break; // don’t run normal tween
-        }
-
         int myTweenHeight = 0;
         int mySizeFactor = 0;
         int mySpaceFactor = 0;
@@ -734,30 +730,47 @@ public class SlotController : MonoBehaviour
             bool IsRegister = false;
             if (!IsTurboOn)
             {
-                yield return alltweens[index].OnStepComplete(delegate { IsRegister = true; });
+                // register callback and wait until it triggers
+                IsRegister = false;
+                if (index >= 0 && index < alltweens.Count && alltweens[index] != null)
+                {
+                    alltweens[index].OnStepComplete(() => { IsRegister = true; });
+                }
                 yield return new WaitUntil(() => IsRegister);
-            }
-            else                                                             // changes
-            {
-                yield return new WaitForSeconds(0.1f);
-            }
-            uiController.StopSpin_Button.gameObject.SetActive(false);
-            alltweens[index].Kill();
-            int tweenpos = (reqpos * (mySizeFactor + mySpaceFactor)) - (mySizeFactor + (2 * mySpaceFactor));
-            if (!isGreen)
-            {
-                slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, 0);                                  //change
-                alltweens[index] = slotTransform.DOLocalMoveY(-tweenpos + 100 + (mySpaceFactor > 0 ? mySpaceFactor / 4 : 0), 0.7f).SetEase(Ease.OutBounce);
             }
             else
             {
-                slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, -myTweenHeight);
-                alltweens[index] = slotTransform.DOLocalMoveY(-tweenpos + 100, 1f);
+                yield return new WaitForSeconds(0.1f);
+            }
+            if (uiController) uiController.StopSpin_Button.gameObject.SetActive(false);
+            if (index >= 0 && index < alltweens.Count && alltweens[index] != null)
+                alltweens[index].Kill();
+            int tweenpos = (reqpos * (mySizeFactor + mySpaceFactor)) - (mySizeFactor + (2 * mySpaceFactor));
+            if (!isGreen)
+            {
+                slotTransform.localPosition = new Vector3(slotTransform.localPosition.x, 0f, slotTransform.localPosition.z);
+                if (index >= 0)
+                {
+                    Tweener t = slotTransform.DOLocalMoveY(-tweenpos + 100 + (mySpaceFactor > 0 ? mySpaceFactor / 4 : 0), 0.7f).SetEase(Ease.OutBounce);
+                    if (index < alltweens.Count) alltweens[index] = t;
+                    else alltweens.Add(t);
+                }
+            }
+            else
+            {
+                slotTransform.localPosition = new Vector3(slotTransform.localPosition.x, -myTweenHeight, slotTransform.localPosition.z);
+                if (index >= 0)
+                {
+                    Tweener t = slotTransform.DOLocalMoveY(-tweenpos + 100, 1f);
+                    if (index < alltweens.Count) alltweens[index] = t;
+                    else alltweens.Add(t);
+                }
             }
 
             if (!StopSpinToggle)
             {
-                yield return alltweens[index].WaitForCompletion();
+                if (index >= 0 && index < alltweens.Count && alltweens[index] != null)
+                    yield return alltweens[index].WaitForCompletion();
             }
             else
             {
@@ -765,18 +778,28 @@ public class SlotController : MonoBehaviour
                 yield return null;
 
             }
-            //  alltweens[index].Kill();
         }
         else
         {
             bool IsRegister = false;
-            yield return redalltweens[index].OnStepComplete(delegate { IsRegister = true; });
+            // register callback and wait
+            if (index >= 0 && index < redalltweens.Count && redalltweens[index] != null)
+            {
+                redalltweens[index].OnStepComplete(() => { IsRegister = true; });
+            }
             yield return new WaitUntil(() => IsRegister);
-            redalltweens[index].Kill();
+            if (index >= 0 && index < redalltweens.Count && redalltweens[index] != null)
+                redalltweens[index].Kill();
             int tweenpos = (reqpos * (mySizeFactor + mySpaceFactor)) - (mySizeFactor + (2 * mySpaceFactor));
-            redalltweens[index] = slotTransform.DOLocalMoveY(-tweenpos + 100 + (mySpaceFactor > 0 ? mySpaceFactor / 4 : 0), 0.7f).SetEase(Ease.OutBounce);
-            yield return redalltweens[index].WaitForCompletion();
-            redalltweens[index].Kill();
+            Tweener newT = slotTransform.DOLocalMoveY(-tweenpos + 100 + (mySpaceFactor > 0 ? mySpaceFactor / 4 : 0), 0.7f).SetEase(Ease.OutBounce);
+            if (index >= 0)
+            {
+                if (index < redalltweens.Count) redalltweens[index] = newT;
+                else redalltweens.Add(newT);
+            }
+            yield return newT.WaitForCompletion();
+            if (index >= 0 && index < redalltweens.Count && redalltweens[index] != null)
+                redalltweens[index].Kill();
         }
         if (isMoney == 0)
         {
@@ -786,167 +809,8 @@ public class SlotController : MonoBehaviour
         {
             if (audioController) audioController.PlayWLAudio("win");
             uiController.AddWinColor(index);
-            //  yield return new WaitForSecondsRealtime(2);
         }
     }
-    // private IEnumerator StopTweening(int reqpos, Transform slotTransform, int index, int type, int isMoney, bool isGreen, bool isMid = false)
-    // {
-    //     Debug.Log($"[StopTweening] index={index} type={type} isGreen={isGreen} isMid={isMid} symbol={isMoney}");
-
-    //     // --- Frozen handling: stop and snap immediately ---
-    //     if (IsFrozen(index))
-    //     {
-    //         // kill any running tween for this column
-    //         if (type == 1)
-    //         {
-    //             if (index < alltweens.Count && alltweens[index] != null) { alltweens[index].Kill(); alltweens[index] = null; }
-    //         }
-    //         else
-    //         {
-    //             if (index < redalltweens.Count && redalltweens[index] != null) { redalltweens[index].Kill(); redalltweens[index] = null; }
-    //         }
-
-    //         string frozenSymbol = GetFrozenSymbol(index);
-    //         int frozenVal = int.Parse(frozenSymbol);
-
-    //         // Force sprite/animation for frozen value
-    //         if (type == 1) PopulateAnimationSprites(Stop_Anims[index], Stop_Images[index], frozenVal);
-    //         else PopulateRedAnimationSprites(RedStop_Anims[index], RedStop_Images[index], frozenVal);
-
-    //         // Snap transform so it won’t keep moving
-    //         if (type == 1)
-    //             slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, 0);
-    //         else
-    //             slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, 0);
-
-    //         // UI + audio
-    //         if (frozenVal > 0)
-    //         {
-    //             uiController.AddWinColor(index);
-    //             if (audioController) audioController.PlayWLAudio("win");
-    //         }
-    //         else
-    //         {
-    //             if (audioController) audioController.PlayWLAudio("dot");
-    //         }
-
-    //         yield break;
-    //     }
-
-    //     // --- compute sizes/positions ---
-    //     int myTweenHeight = isMid ? MidtweenHeight : tweenHeight;
-    //     int mySizeFactor = isMid ? MidIconSizeFactor : IconSizeFactor;
-    //     int mySpaceFactor = isMid ? MidSpaceFactor : SpaceFactor;
-
-    //     // same math you had for tweenpos
-    //     int tweenpos = (reqpos * (mySizeFactor + mySpaceFactor)) - (mySizeFactor + (2 * mySpaceFactor));
-    //     float landingY = -tweenpos + 100 + (mySpaceFactor > 0 ? mySpaceFactor / 4f : 0f);
-
-    //     // --- Normal branch (type == 1) ---
-    //     if (type == 1)
-    //     {
-    //         bool IsRegister = false;
-
-    //         if (!IsTurboOn)
-    //         {
-    //             if (index < alltweens.Count && alltweens[index] != null)
-    //             {
-    //                 alltweens[index].OnStepComplete(() => { IsRegister = true; });
-    //                 yield return new WaitUntil(() => IsRegister);
-    //             }
-    //             else
-    //             {
-    //                 // no running looped tween found - small wait so UI doesn't jump
-    //                 yield return new WaitForSeconds(0.05f);
-    //             }
-    //         }
-    //         else
-    //         {
-    //             yield return new WaitForSeconds(0.1f);
-    //         }
-
-    //         // hide stop button
-    //         if (uiController) uiController.StopSpin_Button.gameObject.SetActive(false);
-
-    //         // Kill loop tween
-    //         if (index < alltweens.Count && alltweens[index] != null)
-    //         {
-    //             alltweens[index].Kill();
-    //             alltweens[index] = null;
-    //         }
-
-    //         // Create final landing tween
-    //         if (!isGreen)
-    //         {
-    //             slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, 0);
-    //             alltweens[index] = slotTransform.DOLocalMoveY(landingY, 0.7f).SetEase(Ease.OutBounce);
-    //         }
-    //         else
-    //         {
-    //             slotTransform.localPosition = new Vector2(slotTransform.localPosition.x, -myTweenHeight);
-    //             alltweens[index] = slotTransform.DOLocalMoveY(-tweenpos + 100, 1f);
-    //         }
-
-    //         if (!StopSpinToggle)
-    //         {
-    //             yield return alltweens[index].WaitForCompletion();
-    //         }
-    //         else
-    //         {
-    //             yield return null;
-    //         }
-    //     }
-    //     // --- Red branch (type != 1) ---
-    //     else
-    //     {
-    //         bool IsRegister = false;
-
-    //         if (!IsTurboOn)
-    //         {
-    //             if (index < redalltweens.Count && redalltweens[index] != null)
-    //             {
-    //                 redalltweens[index].OnStepComplete(() => { IsRegister = true; });
-    //                 yield return new WaitUntil(() => IsRegister);
-    //             }
-    //             else
-    //             {
-    //                 yield return new WaitForSeconds(0.05f);
-    //             }
-    //         }
-    //         else
-    //         {
-    //             yield return new WaitForSeconds(0.1f);
-    //         }
-
-    //         if (index < redalltweens.Count && redalltweens[index] != null)
-    //         {
-    //             redalltweens[index].Kill();
-    //             redalltweens[index] = null;
-    //         }
-
-    //         // landing tween for red
-    //         redalltweens[index] = slotTransform.DOLocalMoveY(landingY, 0.7f).SetEase(Ease.OutBounce);
-    //         yield return redalltweens[index].WaitForCompletion();
-
-    //         if (index < redalltweens.Count && redalltweens[index] != null)
-    //         {
-    //             redalltweens[index].Kill();
-    //             redalltweens[index] = null;
-    //         }
-    //     }
-
-    //     // --- play dot/win based on symbol given in isMoney param ---
-    //     if (isMoney == 0)
-    //     {
-    //         if (audioController) audioController.PlayWLAudio("dot");
-    //     }
-    //     else
-    //     {
-    //         if (audioController) audioController.PlayWLAudio("win");
-    //         uiController.AddWinColor(index);
-    //     }
-    // }
-
 
     private void KillAllTweens()
     {
@@ -994,19 +858,9 @@ public class SlotController : MonoBehaviour
 
     #endregion
 
-    private bool IsFrozen(int column)
+    private bool IsFrozen(int row, int column)
     {
-        var frozen = socketManager.resultData.payload?.frozenIndices;
-        if (frozen == null) return false;
-        return frozen.Exists(f => f.position[1] == column);
-    }
-
-    private string GetFrozenSymbol(int column)
-    {
-        var frozen = socketManager.resultData.payload?.frozenIndices;
-        if (frozen == null) return null;
-        var match = frozen.Find(f => f.position[1] == column);
-        return match?.symbol;
+        return frozenMatrix != null && !string.IsNullOrEmpty(frozenMatrix[row, column]);
     }
 
 }
