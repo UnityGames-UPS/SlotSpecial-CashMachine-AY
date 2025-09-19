@@ -537,7 +537,7 @@ public class UIManager : MonoBehaviour
     }
 
     slotManager.SlotNumber = index;
-    Debug.Log(myvalue);
+    // Debug.Log(myvalue);
     currentBet = myvalue;
 
     if (Bet_Text) Bet_Text.text = myvalue.ToString();
@@ -567,7 +567,7 @@ public class UIManager : MonoBehaviour
 
     slotManager.DenomCounter = index; // keep track for server call
     slotManager.BetCounter = index;
-    Debug.Log(myvalue);
+    // Debug.Log(myvalue);
   }
 
   private void OnBetButton(bool isIncrement)
@@ -771,9 +771,8 @@ public class UIManager : MonoBehaviour
 
   internal void resetWinColor()
   {
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < slotManager.SlotNumber + 1; i++)
     {
-      Debug.Log(i);
       Slots_image[i].color = Color.white;
     }
   }
