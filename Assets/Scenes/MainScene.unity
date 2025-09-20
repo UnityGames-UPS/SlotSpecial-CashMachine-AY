@@ -6956,7 +6956,7 @@ MonoBehaviour:
   JSManager: {fileID: 97085823}
   SlotManager: {fileID: 2046803210}
   UIManager: {fileID: 1534933550}
-  testToken: 1d9081d3832e46e483951df131866dff
+  testToken: 71db7eacd0714a22bc17acfac951970b
 --- !u!1 &503942312
 GameObject:
   m_ObjectHideFlags: 0

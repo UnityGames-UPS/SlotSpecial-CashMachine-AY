@@ -105,11 +105,11 @@ public class SlotController : MonoBehaviour
   internal void UpdateUI(double balance)
   {
     if (uiController) uiController.UpdateBalance(balance);
-    if (!uiController.CheckBalance(balance))
+    string balanceStr = balance.ToString("F2");
+    if (!uiController.CheckBalance(double.Parse(balanceStr)))
     {
       if (uiController) uiController.EnableLowBalance();
     }
-
   }
 
   #region AutoSpin
@@ -433,6 +433,12 @@ public class SlotController : MonoBehaviour
     if (uiController) uiController.GreenRespin(false);
     if (uiController) uiController.RedRespin(false);
     StartNormalAnimation();
+
+    yield return new WaitForSeconds(2f);
+    if (socketManager.resultData.payload.isRedRespin)
+    {
+      yield return RedSpinLogic();
+    }
   }
 
   private IEnumerator InitiateRedRespin(int value, bool isMid)
@@ -697,7 +703,7 @@ public class SlotController : MonoBehaviour
     int tweenpos = (reqpos * (mySizeFactor + mySpaceFactor)) - (mySizeFactor + (2 * mySpaceFactor));
     if (!isGreen)
     {
-      slotTransform.localPosition = new Vector3(slotTransform.localPosition.x, -4783f, slotTransform.localPosition.z);
+      slotTransform.localPosition = new Vector3(slotTransform.localPosition.x, -2400f, slotTransform.localPosition.z);
       Tweener t = slotTransform.DOLocalMoveY(-tweenpos + 100 + (mySpaceFactor > 0 ? mySpaceFactor / 4 : 0), 0.7f).SetEase(Ease.OutBounce);
       redalltweens[index] = t;
     }
