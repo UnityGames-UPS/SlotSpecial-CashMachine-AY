@@ -495,9 +495,9 @@ public class UIManager : MonoBehaviour
       Bet_Slider.minValue = 0;
       Bet_Slider.maxValue = features.Count - 1;
       Bet_Slider.wholeNumbers = true;
-      Bet_Slider.value = 0; // default first bet level
+      Bet_Slider.value = features.Count - 1; // default first bet level
     }
-    OnBetChange(0);
+    OnBetChange(features.Count - 1);
   }
 
   private void OnBetChange(float value)
@@ -852,12 +852,12 @@ public class UIManager : MonoBehaviour
     double prevBalance = double.Parse(BalanceMain_Text.text);
     double prevWinning = 0f;
     UpdateMessageText("Pays " + winning);
-    DOTween.To(() => prevBalance, (val) => prevBalance = val, balance, 2f).OnUpdate(() =>
+    DOTween.To(() => prevBalance, (val) => prevBalance = val, balance, 0.2f).OnUpdate(() =>
     {
       if (BalanceMain_Text) BalanceMain_Text.text = prevBalance.ToString("f2");
     });
 
-    DOTween.To(() => prevWinning, (val) => prevWinning = val, winning, 2f).OnUpdate(() =>
+    DOTween.To(() => prevWinning, (val) => prevWinning = val, winning, 0.2f).OnUpdate(() =>
     {
       if (WinMain_Text) WinMain_Text.text = prevWinning.ToString("f2");
     }).OnComplete(delegate { isComplete = true; });

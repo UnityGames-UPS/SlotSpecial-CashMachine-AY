@@ -6956,7 +6956,7 @@ MonoBehaviour:
   JSManager: {fileID: 97085823}
   SlotManager: {fileID: 2046803210}
   UIManager: {fileID: 1534933550}
-  testToken: 71db7eacd0714a22bc17acfac951970b
+  testToken: 1a20b115696548b19a1974042db13bed
 --- !u!1 &503942312
 GameObject:
   m_ObjectHideFlags: 0
@@ -13254,7 +13254,7 @@ MonoBehaviour:
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_RaycastPadding: {x: -10, y: -10, z: -10, w: -10}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
@@ -26987,7 +26987,7 @@ MonoBehaviour:
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_RaycastPadding: {x: -15, y: -15, z: 0, w: -15}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
