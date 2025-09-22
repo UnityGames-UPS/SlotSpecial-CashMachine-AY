@@ -318,10 +318,10 @@ public class SocketIOManager : MonoBehaviour
 #endif
             Bets = myData.gameData.bets;
             Level = myData.features.levels;
-            UIManager.SetupBets(Level);
-            UIManager.SetupDenoms(Bets);
+            UIManager.SetupBetWindow(Bets, Level);
             SlotManager.PopulateSymbols(myData.uiData.paylines);
             SetInit = true;
+            RaycastBlocker.SetActive(false);
           }
           break;
         }

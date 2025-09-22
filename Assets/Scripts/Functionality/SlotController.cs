@@ -72,7 +72,7 @@ public class SlotController : MonoBehaviour
   [SerializeField]
   private int MidtweenHeight = 0;
   internal int SlotNumber;
-  internal int BetCounter;
+  internal int CurrentBet;
   internal int DenomCounter;
 
   [Header("Controllers")]
@@ -180,7 +180,7 @@ public class SlotController : MonoBehaviour
   {
     FrozenList = new();
     uiController.ResetWinText();
-    if (!uiController.CheckBalance(socketManager.Bets[BetCounter]))
+    if (!uiController.CheckBalance(CurrentBet))
     {
       if (uiController) uiController.EnableLowBalance();
       StopAutoSpin();
@@ -196,7 +196,7 @@ public class SlotController : MonoBehaviour
     IsSpinning = true;
     ResetAllAnims();
     uiController.resetWinColor();
-    if (uiController) uiController.UpdateTweenBalance(socketManager.Bets[BetCounter]);
+    if (uiController) uiController.UpdateTweenBalance(CurrentBet);
 
     for (int i = 0; i < SlotNumber + 1; i++)
     {
@@ -388,10 +388,10 @@ public class SlotController : MonoBehaviour
     PopulateRedSpin(false);
     if (audioController) audioController.PlayWLAudio("respin");
     if (uiController) uiController.GreenRespin(true);
-    yield return new WaitForSeconds(1);
+    yield return new WaitForSeconds(1f);
     if (uiController) uiController.RedRespin(true);
 
-    yield return new WaitForSeconds(1.5f);
+    yield return new WaitForSeconds(2f);
 
     List<int> tweenedCol = new();
     for (int col = 0; col < SlotNumber + 1; col++)

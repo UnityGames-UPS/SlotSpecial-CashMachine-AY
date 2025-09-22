@@ -196,6 +196,7 @@ public class UIManager : MonoBehaviour
   private bool isAtOpen = false;
   [SerializeField] private bool isBetOpen = false;
   private bool isMenuOpen = false;
+  private bool SkipWin;
   private bool isExit = false;
 
   private void Start()
@@ -300,7 +301,7 @@ public class UIManager : MonoBehaviour
     if (Turbo_Button) Turbo_Button.onClick.AddListener(TurboToggle);
 
     if (NiceWinPopupCloseBtn) NiceWinPopupCloseBtn.onClick.RemoveAllListeners();
-    if (NiceWinPopupCloseBtn) NiceWinPopupCloseBtn.onClick.AddListener(delegate { ToggleWinPopup(false); });
+    if (NiceWinPopupCloseBtn) NiceWinPopupCloseBtn.onClick.AddListener(delegate { SkipWin = true; ToggleWinPopup(false); });
 
     for (int i = 0; i < AutoCount_Buttons.Length; i++)
     {
@@ -487,25 +488,10 @@ public class UIManager : MonoBehaviour
     }
   }
 
-  internal void SetupBets(List<int> features)
-  {
-    availableBets = features;
-    if (Bet_Slider)
-    {
-      Bet_Slider.minValue = 0;
-      Bet_Slider.maxValue = features.Count - 1;
-      Bet_Slider.wholeNumbers = true;
-      Bet_Slider.value = features.Count - 1; // default first bet level
-    }
-    OnBetChange(features.Count - 1);
-  }
-
   private void OnBetChange(float value)
   {
     int index = Mathf.RoundToInt(value);
     if (index < 0 || index >= availableBets.Count) return;
-
-    int myvalue = availableBets[index];
 
     // Reset: enable all
     foreach (Transform t in slotManager.Slot_Transform) t.gameObject.SetActive(true);
@@ -537,15 +523,24 @@ public class UIManager : MonoBehaviour
     }
 
     slotManager.SlotNumber = index;
-    // Debug.Log(myvalue);
-    currentBet = myvalue;
+    currentBet = availableBets[index];
+    int TotalBet = availableDenoms[slotManager.DenomCounter] * currentBet;
+    slotManager.CurrentBet = TotalBet;
 
-    if (Bet_Text) Bet_Text.text = myvalue.ToString();
-    if (BetMain_Text) BetMain_Text.text = myvalue.ToString("f2");
+    if (Bet_Text) Bet_Text.text = currentBet.ToString();
+    if (BetMain_Text) BetMain_Text.text = TotalBet.ToString();
   }
 
-  internal void SetupDenoms(List<int> denoms)
+  internal void SetupBetWindow(List<int> denoms, List<int> betLevel)
   {
+    availableBets = betLevel;
+    if (Bet_Slider)
+    {
+      Bet_Slider.minValue = 0;
+      Bet_Slider.maxValue = betLevel.Count - 1;
+      Bet_Slider.wholeNumbers = true;
+      Bet_Slider.value = betLevel.Count - 1; // default first bet level
+    }
     availableDenoms = denoms;
     if (Denom_Slider)
     {
@@ -554,6 +549,8 @@ public class UIManager : MonoBehaviour
       Denom_Slider.wholeNumbers = true;
       Denom_Slider.value = 0; // default first denom
     }
+
+    OnBetChange(betLevel.Count - 1);
     OnDenomChange(0);
   }
 
@@ -562,11 +559,12 @@ public class UIManager : MonoBehaviour
     int index = Mathf.RoundToInt(value);
     if (index < 0 || index >= availableDenoms.Count) return;
 
-    int myvalue = availableDenoms[index];
-    if (Denom_Text) Denom_Text.text = myvalue.ToString();
+    int DenomVal = availableDenoms[index];
+    if (Denom_Text) Denom_Text.text = DenomVal.ToString();
 
     slotManager.DenomCounter = index; // keep track for server call
-    slotManager.BetCounter = index;
+    slotManager.CurrentBet = DenomVal * availableBets[slotManager.SlotNumber];
+    BetMain_Text.text = slotManager.CurrentBet.ToString();
     // Debug.Log(myvalue);
   }
 
@@ -706,8 +704,8 @@ public class UIManager : MonoBehaviour
   #region WinPopup
   private void ToggleWinPopup(bool isActive)
   {
-    CloseAllPopups();
-    if (PopupMain_Object) PopupMain_Object.SetActive(isActive);
+    // CloseAllPopups();
+    // if (PopupMain_Object) PopupMain_Object.SetActive(isActive);
     if (NiceWinPopup) NiceWinPopup.SetActive(isActive);
   }
 
@@ -862,11 +860,19 @@ public class UIManager : MonoBehaviour
       if (WinMain_Text) WinMain_Text.text = prevWinning.ToString("f2");
     }).OnComplete(delegate { isComplete = true; });
 
-    if (winning > (currentBet * 5))
+    if (winning >= (currentBet * 5))
     {
       ToggleWinPopup(true);
       if (audioController) audioController.PlayWLAudio("bigwin");
-      yield return new WaitForSecondsRealtime(3.1f);
+      SkipWin = false;
+      for (int i = 0; i < 20; i++)
+      {
+        if (SkipWin)
+        {
+          break;
+        }
+        yield return new WaitForSecondsRealtime(0.1f);
+      }
       ToggleWinPopup(false);
     }
 
