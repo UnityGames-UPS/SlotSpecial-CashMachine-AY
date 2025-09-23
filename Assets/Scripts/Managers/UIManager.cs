@@ -860,7 +860,7 @@ public class UIManager : MonoBehaviour
       if (WinMain_Text) WinMain_Text.text = prevWinning.ToString("f2");
     }).OnComplete(delegate { isComplete = true; });
 
-    if (winning >= (currentBet * 5))
+    if (winning >= (slotManager.CurrentBet * 5))
     {
       ToggleWinPopup(true);
       if (audioController) audioController.PlayWLAudio("bigwin");
